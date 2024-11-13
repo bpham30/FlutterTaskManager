@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:task_app/login_signup.dart';
 
 class TaskListScreen extends StatefulWidget {
   @override
@@ -15,7 +17,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
       appBar: AppBar(
         title: const Text('Task Manager', style: TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontWeight: FontWeight.bold)),
         backgroundColor: Colors.red,
+        actions: [
+          TextButton.icon(
+        onPressed: () async {
+          await FirebaseAuth.instance.signOut();
+          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => AuthScreen()));
+        },
+        icon: const Icon(Icons.logout, color: Colors.red),
+        label: const Text('Logout', style: TextStyle(color: Colors.red)),
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.white,
+        ),
+          ),
+        ],
       ),
+      
       body: Column(
         children: [
           Padding(
