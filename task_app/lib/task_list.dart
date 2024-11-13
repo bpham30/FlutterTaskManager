@@ -9,6 +9,31 @@ class TaskListScreen extends StatefulWidget {
 }
 
 class _TaskListScreenState extends State<TaskListScreen> {
+  //day and time slot
+  String _selectedDay = 'Monday';
+  String _selectedTimeSlot = '9 am - 10 am';
+
+  final List<String> _days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday'
+  ];
+
+  final List<String> _timeSlots = [
+    '9 am - 10 am',
+    '10 am - 11 am',
+    '11 am - 12 pm',
+    '12 pm - 1 pm',
+    '1 pm - 2 pm',
+    '2 pm - 3 pm',
+    '3 pm - 4 pm',
+    '4 pm - 5 pm'
+  ];
+
   //task input controller
   final TextEditingController _taskController = TextEditingController();
 
@@ -24,7 +49,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   //funct to add task to firestore
-  Future<void> _addTask(String taskName) async {
+  Future<void> _addTask(String taskName, String day, String timeSlot) async {
     //check if task name is not empty
     if (taskName.isNotEmpty && _user != null) {
       //add task to firestore
@@ -34,6 +59,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
         'isCompleted': false,
         'timestamp': FieldValue.serverTimestamp(),
         'userId': _user.uid,
+        'day': day,
+        'timeSlot': timeSlot,
       });
       //clear task input field
       _taskController.clear();
@@ -97,10 +124,42 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                //dropdown day
+                DropdownButton<String>(
+                  value: _selectedDay,
+                  items: _days.map((String day) {
+                    return DropdownMenuItem<String>(
+                      value: day,
+                      child: Text(day),
+                    );
+                  }).toList(),
+                  onChanged: (String? newDay) {
+                    setState(() {
+                      _selectedDay = newDay!;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                //dropdown time slot
+                DropdownButton<String>(
+                  value: _selectedTimeSlot,
+                  items: _timeSlots.map((String slot) {
+                    return DropdownMenuItem<String>(
+                      value: slot,
+                      child: Text(slot),
+                    );
+                  }).toList(),
+                  onChanged: (String? newSlot) {
+                    setState(() {
+                      _selectedTimeSlot = newSlot!;
+                    });
+                  },
+                ),
                 //add task btn
                 ElevatedButton(
                   onPressed: () {
-                    _addTask(_taskController.text);
+                    _addTask(
+                        _taskController.text, _selectedDay, _selectedTimeSlot);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
@@ -118,7 +177,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           //task list
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              // Stream for tasks filtered by userId
+              //get tasks
               stream: _firestore
                   .collection('tasks')
                   .where('userId', isEqualTo: _user.uid)
@@ -126,52 +185,80 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   .snapshots(),
               builder: (context, snapshot) {
                 //loading
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                //error
-                if (snapshot.hasError) {
-                  return const Center(child: Text("Error loading tasks. Please log out and try again."));
-                }
-                //no tasks found
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text("No tasks found"));
-                }
-                //tasks found
+
+                //group tasks by day and time slot
                 final tasks = snapshot.data!.docs;
+                final Map<String, Map<String, List<DocumentSnapshot>>>
+                    groupedTasks = {};
+                //loop through tasks and group them by day and time slot
+                for (var task in tasks) {
+                  final taskData = task.data() as Map<String, dynamic>;
+                  final day = taskData['day'] as String;
+                  final timeSlot = taskData['timeSlot'] as String;
 
-                //task list
-                return ListView.builder(
-                  itemCount: tasks.length,
-                  itemBuilder: (context, index) {
-                    //task data
-                    final task = tasks[index];
-                    final taskData = task.data() as Map<String, dynamic>;
-                    final taskId = task.id;
-                    final taskName = taskData['name'];
-                    final isCompleted = taskData['isCompleted'];
+                  if (!groupedTasks.containsKey(day)) {
+                    groupedTasks[day] = {};
+                  }
+                  if (!groupedTasks[day]!.containsKey(timeSlot)) {
+                    groupedTasks[day]![timeSlot] = [];
+                  }
+                  groupedTasks[day]![timeSlot]!.add(task);
+                }
 
-                    //task list tile
-                    return ListTile(
-                      title: Text(
-                        taskName,
-                        style: TextStyle(
-                          decoration:
-                              isCompleted ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                      //complete task check
-                      leading: Checkbox(
-                        value: isCompleted,
-                        onChanged: (value) => _completeTask(taskId, value!),
-                      ),
-                      //delete task btn
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteTask(taskId),
-                      ),
+                //display tasks
+                return ListView(
+                  //grouped tasks
+                  children: groupedTasks.entries.map((dayEntry) {
+                    final day = dayEntry.key;
+                    final timeSlots = dayEntry.value;
+
+                    return ExpansionTile(
+                      initiallyExpanded: true,
+                      title: Text(day,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      children: timeSlots.entries.map((timeSlotEntry) {
+                        final timeSlot = timeSlotEntry.key;
+                        final tasks = timeSlotEntry.value;
+
+                        return ExpansionTile(
+                          initiallyExpanded: true,
+                          title: Text(timeSlot,
+                              style: TextStyle(color: Colors.grey[600])),
+                          children: tasks.map((task) {
+                            final taskData =
+                                task.data() as Map<String, dynamic>;
+                            final taskName = taskData['name'];
+                            final isCompleted = taskData['isCompleted'];
+
+                            return ListTile(
+                              title: Text(
+                                taskName,
+                                style: TextStyle(
+                                  decoration: isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                              //complete task
+                              leading: Checkbox(
+                                value: isCompleted,
+                                onChanged: (value) =>
+                                    _completeTask(task.id, value!),
+                              ),
+                              //delete task
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete),
+                                onPressed: () => _deleteTask(task.id),
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      }).toList(),
                     );
-                  },
+                  }).toList(),
                 );
               },
             ),
